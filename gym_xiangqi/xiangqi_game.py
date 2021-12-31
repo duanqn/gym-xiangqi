@@ -263,6 +263,7 @@ class XiangQiGame:
         self.render_kills()
 
         # draw all on screen
+        pygame.event.pump()
         pygame.display.update()
 
     def cleanup(self):
