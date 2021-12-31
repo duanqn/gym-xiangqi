@@ -169,7 +169,7 @@ class XiangQiEnv(gym.Env):
         # History of consecutive jiangs (will be used to ban perpetual check)
         self._ally_jiang_history = None
         self._enemy_jiang_history = None
-        self._jiangjun = False
+        self._jiangjun = [False, False]
 
         # Initialize PyGame module
         self._game = XiangQiGame()
@@ -179,6 +179,24 @@ class XiangQiEnv(gym.Env):
 
         # Reset all environment components to initial state
         self.reset()
+
+    def obtain_reward_of_action(self, action) -> float:
+        reward = 0.0
+        _, _, end = action_space_to_move(action)
+        rm_piece_id = self._state[end[0]][end[1]]
+        # Reward based on removed piece
+        reward += PIECE_POINTS[abs(rm_piece_id)]
+
+        # Check if the removed piece is a soldier that has crossed the river
+        if SOLDIER_1 <= abs(rm_piece_id) <= SOLDIER_5:
+            if is_ally(rm_piece_id):
+                if self._ally_piece[rm_piece_id].row <= RIVER_LOW:
+                    reward += 1
+            else:
+                if self._enemy_piece[rm_piece_id].row >= RIVER_HIGH:
+                    reward += 1
+
+        return reward
 
     def step(self, action):
         """
@@ -238,8 +256,6 @@ class XiangQiEnv(gym.Env):
             return np.array(self._state), 0, self._done, {}
 
         # Prepare game state variables
-        reward = 0.0
-
         if self._turn == ALLY:
             pieces = self._ally_piece
             possible_actions = self._ally_actions
@@ -256,6 +272,8 @@ class XiangQiEnv(gym.Env):
         # Check if opponent is in Jiang condition before processing given move
         pre_jiang_actions = self.check_jiang()
 
+        reward = self.obtain_reward_of_action(action)
+
         # Move the piece if legal move is given
         piece, start, end = action_space_to_move(action)
         pieces[piece].move(*end)
@@ -270,18 +288,6 @@ class XiangQiEnv(gym.Env):
         elif rm_piece_id > 0:
             self._ally_piece[rm_piece_id].state = DEAD
 
-        # Reward based on removed piece
-        reward += PIECE_POINTS[abs(rm_piece_id)]
-
-        # Check if the removed piece is a soldier that has crossed the river
-        if SOLDIER_1 <= abs(rm_piece_id) <= SOLDIER_5:
-            if is_ally(rm_piece_id):
-                if self._ally_piece[rm_piece_id].row <= RIVER_LOW:
-                    reward += 1
-            else:
-                if self._enemy_piece[rm_piece_id].row >= RIVER_HIGH:
-                    reward += 1
-
         # End game if the General on either side has been attacked
         if abs(rm_piece_id) == GENERAL:
             self._done = True
@@ -290,7 +296,7 @@ class XiangQiEnv(gym.Env):
         post_jiang_actions = self.check_jiang()
 
         if post_jiang_actions:
-            self._jiangjun = True
+            self._jiangjun[utils.get_oppo(self._turn)] = True
             for jiang_action in post_jiang_actions:
                 if jiang_action in pre_jiang_actions:
                     continue
@@ -303,7 +309,7 @@ class XiangQiEnv(gym.Env):
                     self._done = True
                     return np.array(self._state), LOSE, self._done, {}
         else:       # Reset history if jiang spree has stopped
-            self._jiangjun = False
+            self._jiangjun[utils.get_oppo(self._turn)] = False
             if self._turn == ALLY:
                 self._ally_jiang_history = {}
             else:

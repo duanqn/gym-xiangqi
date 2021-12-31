@@ -1,4 +1,4 @@
-from gym_xiangqi.constants import TOTAL_POS
+from gym_xiangqi.constants import TOTAL_POS, ALLY, ENEMY
 from gym_xiangqi.position import Position
 from gym_xiangqi.action import ConcreteAction
 
@@ -62,3 +62,9 @@ def is_ally(piece_id):
         False: given piece ID is either an empty space or an enemy piece
     """
     return piece_id > 0
+
+def get_oppo(player):
+    if player == ALLY:
+        return ENEMY
+    else:
+        return ALLY

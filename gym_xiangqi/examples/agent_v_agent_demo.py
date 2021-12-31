@@ -1,6 +1,6 @@
 from gym_xiangqi.agents import RandomAgent, GreedyAgent
 from gym_xiangqi.constants import ALLY, PIECE_ID_TO_NAME_CHS
-from gym_xiangqi.utils import action_space_to_move
+from gym_xiangqi.utils import action_space_to_move, get_oppo
 
 import gym
 import time
@@ -17,19 +17,20 @@ def main():
     env.reset()
     while not done:
         # Add a slight delay to properly visualize the game.
-        time.sleep(0.1)
+        time.sleep(0.8)
 
         agent = black_agent if env.turn == ALLY else red_agent
-        action = agent.move(env)
+        player = "红方" if env.turn == ALLY else "黑方"
+
+        action = agent.move(env)    # Flips env.turn
         _, reward, done, _ = env.step(action)
 
-        player = "黑方" if env.turn == ALLY else "红方"
         move = action_space_to_move(action)
-        piece = PIECE_ID_TO_NAME_CHS[0 if env.turn == ALLY else 1][move[0]]
+        piece = PIECE_ID_TO_NAME_CHS['black' if env.turn == ALLY else 'red'][move[0]]
         print(f"Round: {round}")
         print(f"{player} made the move {piece} from {move[1]} to {move[2]}.")
         print(f"Reward: {reward}")
-        if env.jiangjun:
+        if env.jiangjun[env.turn]:
             print("将军！")
         print("================")
 
