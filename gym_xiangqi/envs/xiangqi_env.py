@@ -168,6 +168,7 @@ class XiangQiEnv(gym.Env):
         # History of consecutive jiangs (will be used to ban perpetual check)
         self._ally_jiang_history = None
         self._enemy_jiang_history = None
+        self._jiangjun = False
 
         # Initialize PyGame module
         self._game = XiangQiGame()
@@ -288,6 +289,7 @@ class XiangQiEnv(gym.Env):
         post_jiang_actions = self.check_jiang()
 
         if post_jiang_actions:
+            self._jiangjun = True
             for jiang_action in post_jiang_actions:
                 if jiang_action in pre_jiang_actions:
                     continue
@@ -300,6 +302,7 @@ class XiangQiEnv(gym.Env):
                     self._done = True
                     return np.array(self._state), LOSE, self._done, {}
         else:       # Reset history if jiang spree has stopped
+            self._jiangjun = False
             if self._turn == ALLY:
                 self._ally_jiang_history = {}
             else:
@@ -531,6 +534,10 @@ class XiangQiEnv(gym.Env):
     @property
     def turn(self):
         return self._turn
+
+    @property
+    def jiangjun(self):
+        return self._jiangjun
 
     @property
     def state(self):
