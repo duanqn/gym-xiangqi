@@ -266,10 +266,20 @@ class XiangQiGame:
         pygame.event.pump()
         pygame.display.update()
 
+    def wait_for_exit(self):
+        exit = False
+        while not exit:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.cleanup()
+                    exit = True
+                    break
+
     def cleanup(self):
         """
         Free resources and exit the game and
         """
+        pygame.display.quit()
         pygame.quit()
 
     def reset(self):

@@ -1,6 +1,7 @@
 import gym
 from gym import spaces
 from gym.utils import seeding
+from gym_xiangqi import utils
 import numpy as np
 
 from gym_xiangqi.xiangqi_game import XiangQiGame
@@ -363,7 +364,7 @@ class XiangQiEnv(gym.Env):
         Free up resources and gracefully exit the Xiangqi environment
         """
         if self._game:
-            self._game.cleanup()
+            self._game.wait_for_exit()
 
     def seed(self, seed=None):
         """
@@ -562,3 +563,8 @@ class XiangQiEnv(gym.Env):
     @property
     def game(self):
         return self._game
+
+    def get_actions_for_agent(self):
+        actions = self._ally_actions if self.turn == ALLY else self._enemy_actions
+        moves = np.where(actions == 1)[0]
+        return list(map(utils.action_space_to_action, moves))

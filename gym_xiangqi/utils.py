@@ -1,4 +1,6 @@
 from gym_xiangqi.constants import TOTAL_POS
+from gym_xiangqi.position import Position
+from gym_xiangqi.action import ConcreteAction
 
 
 def move_to_action_space(piece_id, start, end):
@@ -39,6 +41,14 @@ def action_space_to_move(action):
     end[0], end[1] = divmod(end_val, 9)
     return piece_id + 1, start, end
 
+def action_space_to_action(action_index: int) -> ConcreteAction:
+    piece_id, start, end = action_space_to_move(action_index)
+    from_pos = Position(start[0], start[1])
+    to_pos = Position(end[0], end[1])
+    return ConcreteAction(piece_id, from_pos, to_pos)
+
+def action_to_action_space(action: ConcreteAction) -> int:
+    return move_to_action_space(piece_id=action.piece, start=(action.from_pos.row, action.from_pos.col), end=(action.to_pos.row, action.to_pos.col))
 
 def is_ally(piece_id):
     """
