@@ -15,15 +15,18 @@ def main():
     done = False
     round = 0
     env.reset()
+    all_playback = []
+    meta = env.save_meta_info()
     while not done:
         # Add a slight delay to properly visualize the game.
-        time.sleep(0.8)
+        #time.sleep(0.8)
 
         agent = black_agent if env.turn == ALLY else red_agent
         player = "红方" if env.turn == ALLY else "黑方"
 
         action = agent.move(env)    # Flips env.turn
-        _, reward, done, _ = env.step(action)
+        _, reward, done, info = env.step(action)
+        all_playback += info['playback']
 
         move = action_space_to_move(action)
         piece = PIECE_ID_TO_NAME_CHS['black' if env.turn == ALLY else 'red'][move[0]]
@@ -37,6 +40,8 @@ def main():
         round += 1
         env.render()
 
+    #env.restore_from_playback(all_playback, meta)
+    env.render()
     print("Game finished!")
     env.close()
 

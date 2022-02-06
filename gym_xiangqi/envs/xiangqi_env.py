@@ -3,10 +3,12 @@ from gym import spaces
 from gym.utils import seeding
 from gym_xiangqi import utils
 import numpy as np
+from gym_xiangqi.position import Position
 
 from gym_xiangqi.xiangqi_game import XiangQiGame
 from gym_xiangqi.utils import (
     action_space_to_move,
+    is_enemy,
     move_to_action_space,
     is_ally
 )
@@ -169,7 +171,7 @@ class XiangQiEnv(gym.Env):
         # History of consecutive jiangs (will be used to ban perpetual check)
         self._ally_jiang_history = None
         self._enemy_jiang_history = None
-        self._jiangjun = [False, False]
+        self._jiangjun = {ALLY: False, ENEMY: False}
 
         # Initialize PyGame module
         self._game = XiangQiGame()
@@ -180,20 +182,20 @@ class XiangQiEnv(gym.Env):
         # Reset all environment components to initial state
         self.reset()
 
-    def obtain_reward_of_action(self, action) -> float:
+    def obtain_reward_of_action(self, action: int) -> float:
         reward = 0.0
-        _, _, end = action_space_to_move(action)
-        rm_piece_id = self._state[end[0]][end[1]]
+        action = utils.action_space_to_action(action)
+        rm_piece_id = self._state[action.to_pos.row][action.to_pos.col]
         # Reward based on removed piece
         reward += PIECE_POINTS[abs(rm_piece_id)]
 
         # Check if the removed piece is a soldier that has crossed the river
         if SOLDIER_1 <= abs(rm_piece_id) <= SOLDIER_5:
             if is_ally(rm_piece_id):
-                if self._ally_piece[rm_piece_id].row <= RIVER_LOW:
+                if action.to_pos.row <= RIVER_LOW:
                     reward += 1
             else:
-                if self._enemy_piece[rm_piece_id].row >= RIVER_HIGH:
+                if action.to_pos.row >= RIVER_HIGH:
                     reward += 1
 
         return reward
@@ -270,7 +272,7 @@ class XiangQiEnv(gym.Env):
             return np.array(self._state), ILLEGAL_MOVE, False, {}
 
         # Check if opponent is in Jiang condition before processing given move
-        pre_jiang_actions = self.check_jiang()
+        pre_jiang_actions = self.check_jiang(self._turn)
 
         reward = self.obtain_reward_of_action(action)
 
@@ -283,17 +285,25 @@ class XiangQiEnv(gym.Env):
         rm_piece_id = self._state[end[0]][end[1]]
         self._state[end[0]][end[1]] = piece * self._turn
 
-        if rm_piece_id < 0:
+        # Generate playback
+        playback = []
+        playback.append((Position(start[0], start[1]), piece * self._turn))
+        playback.append((Position(end[0], end[1]), rm_piece_id))
+
+        if is_enemy(rm_piece_id):
             self._enemy_piece[-rm_piece_id].state = DEAD
-        elif rm_piece_id > 0:
+        elif is_ally(rm_piece_id):
             self._ally_piece[rm_piece_id].state = DEAD
+        else:
+            # Empty
+            pass
 
         # End game if the General on either side has been attacked
         if abs(rm_piece_id) == GENERAL:
             self._done = True
 
         # Check for perpetual check/jiang
-        post_jiang_actions = self.check_jiang()
+        post_jiang_actions = self.check_jiang(self._turn)
 
         if post_jiang_actions:
             self._jiangjun[utils.get_oppo(self._turn)] = True
@@ -322,7 +332,7 @@ class XiangQiEnv(gym.Env):
         # Update state hash.
         self._state_hash = hash(str(self._state))
 
-        return np.array(self._state), reward, self._done, {}
+        return np.array(self._state), reward, self._done, {'playback': playback}
 
     def reset(self):
         """
@@ -501,17 +511,20 @@ class XiangQiEnv(gym.Env):
             action_space_to_move(action)[1:] for action in legal_actions
         ]
 
-    def check_jiang(self):
+    def check_jiang(self, player):
         """
         Check if the general is in threat (i.e. it is check or "jiang")
         by any of current player's pieces
+
+        Parameters:
+            player (int): -1 for ENEMY and 1 for ALLY
 
         Return:
             list:
             list of actions that lead to Jiang based on current board state
         """
         # Get OPPONENT General
-        if self._turn == ALLY:
+        if player == ALLY:
             general = self._enemy_piece[GENERAL]
             actions = self._ally_actions
         else:
@@ -519,7 +532,7 @@ class XiangQiEnv(gym.Env):
             actions = self._enemy_actions
 
         # Update current player's moves
-        self.get_possible_actions(self._turn)
+        self.get_possible_actions(player)
 
         # Iterate through possible moves of current player's pieces
         actions = np.where(actions == 1)[0]
@@ -570,7 +583,85 @@ class XiangQiEnv(gym.Env):
     def game(self):
         return self._game
 
+    @property
+    def done(self):
+        return self._done
+
     def get_actions_for_agent(self):
         actions = self._ally_actions if self.turn == ALLY else self._enemy_actions
         moves = np.where(actions == 1)[0]
         return list(map(utils.action_space_to_action, moves))
+
+    def save_meta_info(self):
+        save_jiang_history = ({}, {})
+        save_jiang_history[0].update(self._ally_jiang_history)
+        save_jiang_history[1].update(self._enemy_jiang_history)
+        return (save_jiang_history, self.turn)
+
+    def restore_meta_info(self, meta_info) -> None:
+        jiang_history, turn = meta_info
+        self._ally_jiang_history = jiang_history[0]
+        self._enemy_jiang_history = jiang_history[1]
+        self._turn = turn
+
+    def create_checkpoint(self):
+        save_state = self._state.copy()
+        return (save_state, self.copy_meta_info())
+
+    def update_piece_from_board(self):
+        for piece in self._ally_piece[1:]:
+            piece.state = DEAD
+        for piece in self._enemy_piece[1:]:
+            piece.state = DEAD
+
+        for i in range(0, BOARD_ROWS):
+            for j in range(0, BOARD_COLS):
+                id = self._state[i, j]
+
+                if is_ally(id):
+                    piece_list = self._ally_piece
+                elif is_enemy(id):
+                    piece_list = self._enemy_piece
+                else:
+                    # This grid is empty
+                    continue
+                
+                id = abs(id)
+                piece_list[id].row = i
+                piece_list[id].col = j
+                piece_list[id].state = ALIVE
+
+    def print_board(self):
+        print(self._state)
+
+    def _rebuild_info(self):
+        # Update piece positions
+        self.update_piece_from_board()
+
+        # Refresh state_hash
+        self._state_hash = hash(str(self._state))
+
+        # Update legal moves
+        self.get_possible_actions(ALLY)
+        self.get_possible_actions(ENEMY)
+
+        # Update jiangjun states
+        self._jiangjun[ENEMY] = (len(self.check_jiang(ALLY)) > 0)
+        self._jiangjun[ALLY] = (len(self.check_jiang(ENEMY)) > 0)
+
+        self._done = False
+
+    def restore_from_playback(self, playback, meta_info):
+        for pos, piece_id in playback[::-1]:
+            self._state[pos.row, pos.col] = piece_id
+
+        self.restore_meta_info(meta_info)
+
+        self._rebuild_info()
+
+    def restore_from_checkpoint(self, checkpoint):
+        state, meta_info = checkpoint
+        self._state = state
+        self.restore_meta_info(meta_info)
+
+        self._rebuild_info()

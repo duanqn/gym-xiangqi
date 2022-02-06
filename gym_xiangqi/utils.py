@@ -63,8 +63,28 @@ def is_ally(piece_id):
     """
     return piece_id > 0
 
+def is_enemy(piece_id):
+    """
+    Determines if given input piece_id is ally or enemy piece
+    This function CANNOT guarantee if the piece is an enemy piece
+
+    Parameters:
+        piece_id (int): a piece ID integer
+    Return:
+        True: given piece ID is an ally piece
+        False: given piece ID is either an empty space or an enemy piece
+    """
+    return piece_id < 0
+
 def get_oppo(player):
     if player == ALLY:
         return ENEMY
     else:
         return ALLY
+
+class ScopeExit:
+    def __init__(self, cleanup) -> None:
+        self._cleanup = cleanup
+
+    def __del__(self) -> None:
+        self._cleanup()
